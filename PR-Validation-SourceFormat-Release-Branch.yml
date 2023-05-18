@@ -1,0 +1,184 @@
+name: PR-Validation-SourceFormat-Release-Branch
+
+on:
+  workflow_dispatch: # Can also be manually triggered, if needed. 
+  
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+    paths-ignore:
+      - '.github/workflows/**'
+      
+    branches:
+      - REL**
+
+permissions:
+      contents: write # Required to commit changes from Salesforce and push them back to the remote.
+      packages: read
+      pull-requests: write
+
+# Jobs to be executed when the pull_request,paths and branches conditions are met  
+jobs:
+  validate-deployment-when-pr-is-created-for-release-branch:
+    runs-on: [self-hosted, linux]
+    container:
+        image: ghcr.io/dts-productivity-engineering/docker_new/github-runner-new:main
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+
+#Get the branch names
+
+      - name: get the RELEASE branch ref !!
+        id: RELEASE-branch-check
+        run: | 
+          echo "::set-output name=RELEASE-branch::${{ github.base_ref }}"
+
+
+#Send Slack notification stating the initiated the validation
+
+      - name: Send slack notification before starting the PR validation for RELEASE Branch
+        uses: ravsamhq/notify-slack-action@v2
+        with:
+          notification_title: "{emoji}Hello ${{ github.actor }}! Initiated the PR ${{ github.event.pull_request.html_url }} validation against PRODUCTION Org!"
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_PRODUCTION }}"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_PRODUCTION }}
+
+#Checkout Repository
+
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Install Salesforce CLI
+        run: |
+          wget https://developer.salesforce.com/media/salesforce-cli/sfdx/channels/stable/sfdx-linux-x64.tar.xz
+          mkdir $GITHUB_WORKSPACE/sfdx
+          tar xJf sfdx-linux-x64.tar.xz -C $GITHUB_WORKSPACE/sfdx --strip-components 1
+          echo "$GITHUB_WORKSPACE/sfdx/bin" >> $GITHUB_PATH
+          $GITHUB_WORKSPACE/sfdx/bin/sfdx version
+
+      - name: Installing sfdx git delta
+        run: |
+          echo y | sfdx plugins:install sfdx-git-delta
+          sfdx plugins  
+
+      - name: Installing npm ds-sfdc/sfparty
+        run: |
+          npm i -g @ds-sfdc/sfparty
+
+      - name: Finding the git diff between current opened PR request for ${{ github.head_ref }} and ${{ github.base_ref }} branch
+        run: |
+          git config --global --add safe.directory /__w/SalesforceCI/SalesforceCI
+          git fetch origin ${{ github.base_ref }}
+          git diff --name-only origin/${{ github.base_ref }} HEAD > mydiff
+          echo "mydiff = "
+          cat mydiff
+
+      - name: Login to PRODUCTION Org
+        run: |
+          echo ${{ secrets.SFDX_LOGIN_URL_PRODUCTION }} > ./SFDX_LOGIN_URL_PRODUCTION.txt
+          sfdx auth:sfdxurl:store -f ./SFDX_LOGIN_URL_PRODUCTION.txt -s -a targetOrg
+
+#Getting the TestClasses and checklist of PR changes from the PR Body 
+    
+      - name: Generate the Incremental changes Test Classes to be run
+        id: Incremental-TestClasses
+        run: | 
+          echo "${{ github.event.pull_request.body }}" | 
+          echo "::set-output name=Incremental-Tests::$(sed -n -e 's/^Incremental_TestClasses_Toberun://p')"
+      
+      - name: Print incremental changes Test Classes to be run
+        run: | 
+          echo "'${{ steps.incremental-TestClasses.outputs.incremental-Tests }}'"
+          
+      - name: Generate the Destructive changes Test Classes to be run
+        id: Destructive-TestClasses
+        run: | 
+          echo "${{ github.event.pull_request.body }}" | 
+          echo "::set-output name=Destructive-Tests::$(sed -n -e 's/^Destructive_TestClasses_Toberun://p')"
+      
+      - name: Print Destructive changes Test Classes to be run
+        run: | 
+          echo "'${{ steps.Destructive-TestClasses.outputs.Destructive-Tests }}'"
+           
+#Creating the delta package
+
+      - name: Create delta packages for PR in deploy-zip folder
+        run: |
+          mkdir deploy-zip
+          sfdx sgd:source:delta --from origin/${{ github.base_ref }} --to HEAD --output deploy-zip/ --generate-delta
+
+      - name: Create delta packages for workflows,labels,profiles and permission sets
+        run: |
+          sfparty combine --git=origin/${{ github.base_ref }} HEAD --append --delta --package=deploy-zip/package/package.xml --destructive=deploy-zip/destructiveChanges/destructiveChanges.xml --target=deploy-zip/force-app
+          
+      - name: Print the package.xml of the PR
+        run: |
+          cat deploy-zip/package/package.xml
+          
+      - name: Print the destructiveChanges.xml of the PR if any
+        run: |
+          cat deploy-zip/destructiveChanges/destructiveChanges.xml
+          
+#Validating the PR 
+
+      - name: Validate the Incremental Changes 
+        run: |
+          if 
+          cat ./deploy-zip/package/package.xml | grep "<members>"
+          then
+          sfdx force:source:deploy -c -p deploy-zip --testlevel RunSpecifiedTests --runtests ${{ steps.incremental-TestClasses.outputs.incremental-Tests }} -w 120
+          fi           
+               
+      - name: Validate the Destructive Changes
+        run: |
+          if
+          cat ./deploy-zip/destructiveChanges/destructiveChanges.xml | grep "<members>"
+          then
+          sfdx force:mdapi:deploy -c -d ./deploy-zip/destructiveChanges --testlevel RunSpecifiedTests --runtests ${{ steps.Destructive-TestClasses.outputs.Destructive-Tests }} -w 120
+          fi
+
+#Send Slack notification depending on the job status
+
+      - name: Send slack notification if the validation is Succeeded against the PRODUCTION Org!
+        uses: ravsamhq/notify-slack-action@v2
+        if: always()
+        with:
+          notification_title:  "{emoji}Hello ${{ github.actor }}! Validation has been completed for the PR ${{ github.event.pull_request.html_url }}. Please merge the PR into ${{ github.event.pull_request.base.ref }} branch."
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_PRODUCTION }}"
+          notify_when: "success"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_PRODUCTION }}
+
+      - name: Send slack notification if the validation is failed against the PRODUCTION Org!
+        uses: ravsamhq/notify-slack-action@v2
+        if: always()
+        with:
+          notification_title:  "{emoji}Hello ${{ github.actor }}! Validation has been failed for the PR ${{ github.event.pull_request.html_url }}. Please check!"
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_PRODUCTION }}"
+          notify_when: "failure"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_PRODUCTION }}
+
+#Cleanup the runner
+
+      - name: Clean Workspace
+        continue-on-error: true
+        id: clean_workspace
+        uses: AutoModality/action-clean@v1.1.0
+        if: always()

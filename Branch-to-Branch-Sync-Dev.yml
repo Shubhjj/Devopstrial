@@ -1,0 +1,42 @@
+# This workflow is used to create PR from source branch to targer branch
+
+name: Branch-to-Branch-Sync-Dev
+
+on:
+  workflow_dispatch: # Can also be manually triggered, if needed.  
+    inputs:
+      sourceEnvironmentName:
+        description: "Name of source branch (PR Create from):"
+        required: true
+      targetEnvironmentName:
+        description: "Name of target branch (PR merge into):"
+        required: true
+permissions:
+      contents: write # Required to commit changes from Salesforce and push them back to the remote.
+      packages: read
+      pull-requests: write
+
+# Jobs to be executed when the above conditions are met  
+jobs:
+  Create-PR:
+    runs-on: [self-hosted, linux]
+    container:
+        image: ghcr.io/dts-productivity-engineering/docker_new/github-runner-new:main
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+         
+      - name: Opening pull request
+        id: Pull-Request
+        uses: tretuna/sync-branches@1.4.0
+        with:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          FROM_BRANCH: ${{ github.event.inputs.sourceEnvironmentName }}
+          TO_BRANCH: ${{ github.event.inputs.targetEnvironmentName }}
+          PULL_REQUEST_TITLE: PR from ${{ github.event.inputs.sourceEnvironmentName }} branch to ${{ github.event.inputs.targetEnvironmentName }} branch.
+          PULL_REQUEST_BODY: ${{ vars.PULL_REQUEST_BODY }}
+          PULL_REQUEST_IS_DRAFT: true

@@ -1,0 +1,409 @@
+name: PR-Validation-SourceFormat-NonProd
+
+on:
+  workflow_dispatch: # Can also be manually triggered, if needed. 
+  
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      
+    paths-ignore:
+      - '.github/workflows/**'
+      
+    branches:
+      - sfproddev
+      - sfprodstg
+      - sfprojdev
+      - sfprojqa
+      - sfprojuat
+
+permissions:
+      contents: write # Required to commit changes from Salesforce and push them back to the remote.
+      packages: read
+      pull-requests: write
+
+# Jobs to be executed when the pull_request,paths and branches conditions are met  
+jobs:
+  validate-deployment-when-pr-is-created:
+    runs-on: [self-hosted, linux]
+    container:
+        image: ghcr.io/dts-productivity-engineering/docker_new/github-runner-new:main
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+
+#Get the branch names
+
+      - name: get the SFPRODDEV branch ref !!
+        id: SFPRODDEV-branch-check
+        run: | 
+          echo "::set-output name=SFPRODDEV-branch::${{ github.base_ref }}"
+
+      - name: get the SFPRODSTG branch ref !!
+        id: SFPRODSTG-branch-check
+        run: | 
+          echo "::set-output name=SFPRODSTG-branch::${{ github.base_ref }}"
+
+      - name: get the SFPROJDEV branch ref !!
+        id: SFPROJDEV-branch-check
+        run: | 
+          echo "::set-output name=SFPROJDEV-branch::${{ github.base_ref }}"
+
+      - name: get the SFPROJQA branch ref !!
+        id: SFPROJQA-branch-check
+        run: | 
+          echo "::set-output name=SFPROJQA-branch::${{ github.base_ref }}"
+
+      - name: get the SFPROJUAT branch ref !!
+        id: SFPROJUAT-branch-check
+        run: | 
+          echo "::set-output name=SFPROJUAT-branch::${{ github.base_ref }}"
+
+#Send Slack notification stating the initiated the validation
+
+      - name: Send slack notification before starting the PR validation for SFPRODDEV Branch
+        uses: ravsamhq/notify-slack-action@v2
+        if: steps.SFPRODDEV-branch-check.outputs.SFPRODDEV-branch == 'sfproddev'
+        with:
+          notification_title: "{emoji}Hello ${{ github.actor }}! Initiated the PR ${{ github.event.pull_request.html_url }} validation against SFPRODDEV sandbox!"
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPRODDEV }}"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPRODDEV }}
+
+      - name: Send slack notification before starting the PR validation for SFPRODSTG Branch
+        uses: ravsamhq/notify-slack-action@v2
+        if: steps.SFPRODSTG-branch-check.outputs.SFPRODSTG-branch == 'sfprodstg'
+        with:
+          notification_title: "{emoji}Hello ${{ github.actor }}! Initiated the PR ${{ github.event.pull_request.html_url }} validation against SFPRODSTG sandbox!"
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPRODSTG }}"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPRODSTG }}
+
+      - name: Send slack notification before starting the PR validation for SFPROJDEV Branch
+        uses: ravsamhq/notify-slack-action@v2
+        if: steps.SFPROJDEV-branch-check.outputs.SFPROJDEV-branch == 'sfprojdev'
+        with:
+          notification_title: "{emoji}Hello ${{ github.actor }}! Initiated the PR ${{ github.event.pull_request.html_url }} validation against SFPROJDEV sandbox!"
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPROJDEV }}"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPROJDEV }}
+
+      - name: Send slack notification before starting the PR validation for SFPROJQA Branch
+        uses: ravsamhq/notify-slack-action@v2
+        if: steps.SFPROJQA-branch-check.outputs.SFPROJQA-branch == 'sfprojqa'
+        with:
+          notification_title: "{emoji}Hello ${{ github.actor }}! Initiated the PR ${{ github.event.pull_request.html_url }} validation against SFPROJQA sandbox!"
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPROJQA }}"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPROJQA }}
+
+      - name: Send slack notification before starting the PR validation for SFPROJUAT Branch
+        uses: ravsamhq/notify-slack-action@v2
+        if: steps.SFPROJUAT-branch-check.outputs.SFPROJUAT-branch == 'sfprojuat'
+        with:
+          notification_title: "{emoji}Hello ${{ github.actor }}! Initiated the PR ${{ github.event.pull_request.html_url }} validation against SFPROJUAT sandbox!"
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPROJUAT }}"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPROJUAT }}
+
+#Checkout Repository
+
+      - name: Checkout source code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: full        
+
+      - name: Install Salesforce CLI
+        run: |
+          wget https://developer.salesforce.com/media/salesforce-cli/sfdx/channels/stable/sfdx-linux-x64.tar.xz
+          mkdir $GITHUB_WORKSPACE/sfdx
+          tar xJf sfdx-linux-x64.tar.xz -C $GITHUB_WORKSPACE/sfdx --strip-components 1
+          echo "$GITHUB_WORKSPACE/sfdx/bin" >> $GITHUB_PATH
+          $GITHUB_WORKSPACE/sfdx/bin/sfdx version
+
+      - name: Installing sfdx git delta
+        run: |
+          echo y | sfdx plugins:install sfdx-git-delta
+          sfdx plugins  
+
+      - name: Installing npm ds-sfdc/sfparty
+        run: |
+          npm i -g @ds-sfdc/sfparty
+          
+      - name: Finding the git diff between current opened PR request for ${{ github.head_ref }} and ${{ github.base_ref }} branch
+        run: |
+          git config --global --add safe.directory /__w/SalesforceCI/SalesforceCI
+          git fetch origin ${{ github.base_ref }}
+          git diff --name-only origin/${{ github.base_ref }} HEAD > mydiff
+          echo "mydiff = "
+          cat mydiff
+
+      - name: Login to SFPRODDEV sandbox
+        if: steps.SFPRODDEV-branch-check.outputs.SFPRODDEV-branch == 'sfproddev'
+        run: |
+          echo ${{ secrets.SFDX_LOGIN_URL_SFPRODDEV}} > ./SFDX_LOGIN_URL_SFPRODDEV.txt
+          sfdx auth:sfdxurl:store -f ./SFDX_LOGIN_URL_SFPRODDEV.txt -s -a targetOrg
+
+      - name: Login to SFPRODSTG sandbox
+        if: steps.SFPRODSTG-branch-check.outputs.SFPRODSTG-branch == 'sfprodstg'
+        run: |
+          echo ${{ secrets.SFDX_LOGIN_URL_SFPRODSTG}} > ./SFDX_LOGIN_URL_SFPRODSTG.txt
+          sfdx auth:sfdxurl:store -f ./SFDX_LOGIN_URL_SFPRODSTG.txt -s -a targetOrg  
+
+      - name: Login to SFPROJDEV sandbox
+        if: steps.SFPROJDEV-branch-check.outputs.SFPROJDEV-branch == 'sfprojdev'
+        run: |
+          echo ${{ secrets.SFDX_LOGIN_URL_SFPROJDEV}} > ./SFDX_LOGIN_URL_SFPROJDEV.txt
+          sfdx auth:sfdxurl:store -f ./SFDX_LOGIN_URL_SFPROJDEV.txt -s -a targetOrg
+
+      - name: Login to SFPROJQA sandbox
+        if: steps.SFPROJQA-branch-check.outputs.SFPROJQA-branch == 'sfprojqa'
+        run: |
+          echo ${{ secrets.SFDX_LOGIN_URL_SFPROJQA}} > ./SFDX_LOGIN_URL_SFPROJQA.txt
+          sfdx auth:sfdxurl:store -f ./SFDX_LOGIN_URL_SFPROJQA.txt -s -a targetOrg
+
+      - name: Login to SFPROJUAT sandbox
+        if: steps.SFPROJUAT-branch-check.outputs.SFPROJUAT-branch == 'sfprojuat'
+        run: |
+          echo ${{ secrets.SFDX_LOGIN_URL_SFPROJUAT}} > ./SFDX_LOGIN_URL_SFPROJUAT.txt
+          sfdx auth:sfdxurl:store -f ./SFDX_LOGIN_URL_SFPROJUAT.txt -s -a targetOrg
+
+#Getting the TestClasses and checklist of PR changes from the PR Body 
+    
+      - name: Generate the Incremental changes Test Classes to be run
+        id: Incremental-TestClasses
+        run: | 
+          echo "${{ github.event.pull_request.body }}" | 
+          echo "::set-output name=Incremental-Tests::$(sed -n -e 's/^Incremental_TestClasses_Toberun://p')"
+      
+      - name: Print incremental changes Test Classes to be run
+        run: | 
+          echo "'${{ steps.incremental-TestClasses.outputs.incremental-Tests }}'"
+          
+      - name: Generate the Destructive changes Test Classes to be run
+        id: Destructive-TestClasses
+        run: | 
+          echo "${{ github.event.pull_request.body }}" | 
+          echo "::set-output name=Destructive-Tests::$(sed -n -e 's/^Destructive_TestClasses_Toberun://p')"
+      
+      - name: Print Destructive changes Test Classes to be run
+        run: | 
+          echo "'${{ steps.Destructive-TestClasses.outputs.Destructive-Tests }}'"
+           
+#Creating the delta package
+
+      - name: Create delta packages for PR in deploy-zip folder
+        run: |
+          mkdir deploy-zip
+          sfdx sgd:source:delta --from origin/${{ github.base_ref }} --to HEAD --output deploy-zip/ --generate-delta
+
+      - name: Create delta packages for workflows,labels,profiles and permission sets
+        run: |
+          sfparty combine --git=origin/${{ github.base_ref }} HEAD --append --delta --package=deploy-zip/package/package.xml --destructive=deploy-zip/destructiveChanges/destructiveChanges.xml --target=deploy-zip/force-app
+          
+      - name: Print the package.xml of the PR
+        run: |
+          cat deploy-zip/package/package.xml
+
+      - name: Print the destructiveChanges.xml of the PR if any
+        run: |
+          cat deploy-zip/destructiveChanges/destructiveChanges.xml
+          
+#Validating the PR for SFPROJUAT and SFPRODSTG Org's with specific Tests
+
+      - name: Validate the Incremental Changes for SFPROJUAT and SFPRODSTG Org's
+        if: steps.SFPRODSTG-branch-check.outputs.SFPRODSTG-branch == 'sfprodstg' || steps.SFPROJUAT-branch-check.outputs.SFPROJUAT-branch == 'sfprojuat'
+        run: |
+          if 
+          cat ./deploy-zip/package/package.xml | grep "<members>"
+          then
+          sfdx force:source:deploy -c -p deploy-zip --testlevel RunSpecifiedTests --runtests ${{ steps.incremental-TestClasses.outputs.incremental-Tests }} -w 120
+          fi  
+
+      - name: Validate the Destructive Changes SFPROJUAT and SFPRODSTG Org's
+        if: steps.SFPRODSTG-branch-check.outputs.SFPRODSTG-branch == 'sfprodstg' || steps.SFPROJUAT-branch-check.outputs.SFPROJUAT-branch == 'sfprojuat'
+        run: |
+          if
+          cat ./deploy-zip/destructiveChanges/destructiveChanges.xml | grep "<members>"
+          then
+          sfdx force:mdapi:deploy -c -d ./deploy-zip/destructiveChanges --testlevel RunSpecifiedTests --runtests ${{ steps.Destructive-TestClasses.outputs.Destructive-Tests }} -w 120
+          fi
+
+#Validating the PR for SFPROJDEV and SFPROJQA and SFPRODDEV Org's with NoTestRun and Specific tests
+     
+      - name: Validate the Incremental Changes for SFPROJDEV and SFPROJQA and SFPRODDEV
+        if: steps.SFPROJDEV-branch-check.outputs.SFPROJDEV-branch == 'sfprojdev' || steps.SFPROJQA-branch-check.outputs.SFPROJQA-branch == 'sfprojqa' || steps.SFPRODDEV-branch-check.outputs.SFPRODDEV-branch == 'sfproddev'
+        run: | 
+         if 
+         cat ./deploy-zip/package/package.xml | grep "<members>"
+         then
+         sfdx force:source:deploy -c -p deploy-zip -w 120
+         fi
+
+      - name: Validate the destructive Changes for SFPROJDEV and SFPROJQA and SFPRODDEV
+        if: steps.SFPROJDEV-branch-check.outputs.SFPROJDEV-branch == 'sfprojdev' || steps.SFPROJQA-branch-check.outputs.SFPROJQA-branch == 'sfprojqa' || steps.SFPRODDEV-branch-check.outputs.SFPRODDEV-branch == 'sfproddev'
+        run: | 
+         if 
+         cat ./deploy-zip/destructiveChanges/destructiveChanges.xml | grep "<members>"
+         then
+         sfdx force:mdapi:deploy -c -d ./deploy-zip/destructiveChanges -w 120
+         fi
+
+#Send Slack notification depending on the job status
+
+      - name: Send slack notification if the validation is Succeeded against the SFPRODDEV sandbox!
+        uses: ravsamhq/notify-slack-action@v2
+        if: always() && steps.SFPRODDEV-branch-check.outputs.SFPRODDEV-branch == 'sfproddev'
+        with:
+          notification_title:  "{emoji}Hello ${{ github.actor }}! Validation has been completed for the PR ${{ github.event.pull_request.html_url }}. Please merge the PR into ${{ github.event.pull_request.base.ref }} branch."
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPRODDEV }}"
+          notify_when: "success"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPRODDEV }}
+
+      - name: Send slack notification if the validation is Succeeded against the SFPRODSTG sandbox!
+        uses: ravsamhq/notify-slack-action@v2
+        if: always() && steps.SFPRODSTG-branch-check.outputs.SFPRODSTG-branch == 'sfprodstg'
+        with:
+          notification_title: "{emoji}Hello ${{ github.actor }}! Validation has been completed for the PR ${{ github.event.pull_request.html_url }}. Please merge the PR into ${{ github.event.pull_request.base.ref }} branch."
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPRODSTG }}"
+          notify_when: "success"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPRODSTG }}
+
+      - name: Send slack notification if the validation is Succeeded against the SFPROJDEV sandbox!
+        uses: ravsamhq/notify-slack-action@v2
+        if: always() && steps.SFPROJDEV-branch-check.outputs.SFPROJDEV-branch == 'sfprojdev'
+        with:
+          notification_title: "{emoji}Hello ${{ github.actor }}! Validation has been completed for the PR ${{ github.event.pull_request.html_url }}. Please merge the PR into ${{ github.event.pull_request.base.ref }} branch."
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPROJDEV }}"
+          notify_when: "success"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPROJDEV }}
+
+      - name: Send slack notification if the validation is Succeeded against the SFPROJQA sandbox!
+        uses: ravsamhq/notify-slack-action@v2
+        if: always() && steps.SFPROJQA-branch-check.outputs.SFPROJQA-branch == 'sfprojqa'
+        with:
+          notification_title: "{emoji}Hello ${{ github.actor }}! Validation has been completed for the PR ${{ github.event.pull_request.html_url }}. Please merge the PR into ${{ github.event.pull_request.base.ref }} branch."
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPROJQA }}"
+          notify_when: "success"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPROJQA }}
+
+      - name: Send slack notification if the validation is Succeeded against the SFPROJUAT sandbox!
+        uses: ravsamhq/notify-slack-action@v2
+        if: always() && steps.SFPROJUAT-branch-check.outputs.SFPROJUAT-branch == 'sfprojuat'
+        with:
+          notification_title: "{emoji}Hello ${{ github.actor }}! Validation has been completed for the PR ${{ github.event.pull_request.html_url }}. Please merge the PR into ${{ github.event.pull_request.base.ref }} branch."
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPROJUAT }}"
+          notify_when: "success"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPROJUAT }}
+
+      - name: Send slack notification if the validation is failed against the SFPRODDEV sandbox!
+        uses: ravsamhq/notify-slack-action@v2
+        if: always() && steps.SFPRODDEV-branch-check.outputs.SFPRODDEV-branch == 'sfproddev'
+        with:
+          notification_title:  "{emoji}Hello ${{ github.actor }}! Validation has been failed for the PR ${{ github.event.pull_request.html_url }}. Please check!"
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPRODDEV }}"
+          notify_when: "failure"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPRODDEV }}
+
+      - name: Send slack notification if the validation is failed against the SFPRODSTG sandbox!
+        uses: ravsamhq/notify-slack-action@v2
+        if: always() && steps.SFPRODSTG-branch-check.outputs.SFPRODSTG-branch == 'sfprodstg'
+        with:
+          notification_title: "{emoji}Hello ${{ github.actor }}! Validation has been failed for the PR ${{ github.event.pull_request.html_url }}. Please check!"
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPRODSTG }}"
+          notify_when: "failure"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPRODSTG }}
+
+      - name: Send slack notification if the validation is failed against the SFPROJDEV sandbox!
+        uses: ravsamhq/notify-slack-action@v2
+        if: always() && steps.SFPROJDEV-branch-check.outputs.SFPROJDEV-branch == 'sfprojdev'
+        with:
+          notification_title: "{emoji}Hello ${{ github.actor }}! Validation has been failed for the PR ${{ github.event.pull_request.html_url }}. Please check!"
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPROJDEV }}"
+          notify_when: "failure"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPROJDEV }}
+
+      - name: Send slack notification if the validation is failed against the SFPROJQA sandbox!
+        uses: ravsamhq/notify-slack-action@v2
+        if: always() && steps.SFPROJQA-branch-check.outputs.SFPROJQA-branch == 'sfprojqa'
+        with:
+          notification_title: "{emoji}Hello ${{ github.actor }}! Validation has been failed for the PR ${{ github.event.pull_request.html_url }}. Please check!"
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPROJQA }}"
+          notify_when: "failure"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPROJQA }}
+
+      - name: Send slack notification if the validation is failed against the SFPROJUAT sandbox!
+        uses: ravsamhq/notify-slack-action@v2
+        if: always() && steps.SFPROJUAT-branch-check.outputs.SFPROJUAT-branch == 'sfprojuat'
+        with:
+          notification_title: "{emoji}Hello ${{ github.actor }}! Validation has been failed for the PR ${{ github.event.pull_request.html_url }}. Please check!"
+          mention_groups: "${{ vars.SLACK_CHANNEL_FOR_SFPROJUAT }}"
+          notify_when: "failure"
+          status: ${{ job.status }}
+          footer: "<{repo_url}|{repo}>"
+          message_format: "Please review the log file at {run_url}"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_SFPROJUAT }}
+
+#Cleanup the runner
+
+      - name: Clean Workspace
+        continue-on-error: true
+        id: clean_workspace
+        uses: AutoModality/action-clean@v1.1.0
+        if: always()

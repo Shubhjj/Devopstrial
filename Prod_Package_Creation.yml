@@ -1,0 +1,154 @@
+name: Prod_Package_Creation
+
+on:
+  workflow_dispatch: # Can also be manually triggered, if needed. 
+  
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      
+    branches:
+      - main
+
+    paths-ignore:
+      - '.github/workflows/**'
+
+permissions:
+      contents: write # Required to commit changes from Salesforce and push them back to the remote.
+      packages: read
+      pull-requests: write
+
+# Jobs to be executed when the pull_request,paths and branches conditions are met  
+jobs:
+  validate-deployment-when-pr-is-created:
+    runs-on: [self-hosted, linux]
+    container:
+        image: ghcr.io/dts-productivity-engineering/docker_new/github-runner-new:main
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+     
+#Checkout Repository
+
+      - name: Checkout source code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: full        
+
+      - name: Install Salesforce CLI
+        run: |
+          wget https://developer.salesforce.com/media/salesforce-cli/sfdx/channels/stable/sfdx-linux-x64.tar.xz
+          mkdir $GITHUB_WORKSPACE/sfdx
+          tar xJf sfdx-linux-x64.tar.xz -C $GITHUB_WORKSPACE/sfdx --strip-components 1
+          echo "$GITHUB_WORKSPACE/sfdx/bin" >> $GITHUB_PATH
+          $GITHUB_WORKSPACE/sfdx/bin/sfdx version
+      - name: Installing sfdx git delta
+        run: |
+          echo y | sfdx plugins:install sfdx-git-delta
+          sfdx plugins  
+      - name: Installing npm ds-sfdc/sfparty
+        run: |
+          npm i -g @ds-sfdc/sfparty
+          
+      - name: Finding the git diff between current opened PR request for ${{ github.head_ref }} and ${{ github.base_ref }} branch
+        run: |
+          git config --global --add safe.directory /__w/SalesforceCI/SalesforceCI
+          git fetch origin ${{ github.base_ref }}
+          git diff --name-only origin/${{ github.base_ref }} HEAD > mydiff
+          echo "mydiff = "
+          cat mydiff
+      
+           
+#Creating the delta package
+
+      - name: Create delta packages for PR in deploy-zip folder
+        run: |
+          mkdir deploy-zip
+          sfdx sgd:source:delta --from origin/${{ github.base_ref }} --to HEAD --output deploy-zip/ --generate-delta
+      - name: Create delta packages for workflows,labels,profiles and permission sets
+        run: |
+          sfparty combine --git=origin/${{ github.base_ref }} HEAD --append --delta --package=deploy-zip/package/package.xml --destructive=deploy-zip/destructiveChanges/destructiveChanges.xml --target=deploy-zip/force-app
+          
+      - name: Print the package.xml of the PR
+        run: |
+          cat deploy-zip/package/package.xml
+      - name: Print the destructiveChanges.xml of the PR if any
+        run: |
+          cat deploy-zip/destructiveChanges/destructiveChanges.xml
+ 
+ # Downloading zip files and package.xml and sharing in slack channel for review by Dev Team  
+      - name: Send Deploy-Zip Folder as Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: deploy-zip
+          path: deploy-zip/
+      
+      
+      - name: Download Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: deploy-zip
+          path: deploy-zip/
+       
+      - name: Zip Artifacts
+        run: zip -r deploy-zip.zip deploy-zip/ 
+          
+
+         
+#Send Slack notification 
+
+      - name: Send slack notification for package creation status
+        uses: ravsamhq/notify-slack-action@v2
+        if: always()
+        with:
+          status: ${{ job.status }}
+          fields: |
+            {
+              "Artifacts": "https://github.com/DTS-Productivity-Engineering/SalesforceCI/actions/runs/${{ github.run_id }}/artifacts|Download Artifacts",
+              "Zip": "https://github.com/DTS-Productivity-Engineering/SalesforceCI/suites/${{ github.run_id }}|Download Zip"
+            }
+          attachments: |
+            [
+              {
+                "fallback": "Artifacts",
+                "title": "Artifacts",
+                "title_link": "https://github.com/DTS-Productivity-Engineering/SalesforceCI/actions/runs/${{ github.run_id }}/artifacts",
+                "text": "Download Artifacts"
+              },
+              {
+                "fallback": "Zip",
+                "title": "Zip",
+                "title_link": "https://github.com/DTS-Productivity-Engineering/SalesforceCI/suites/${{ github.run_id }}",
+                "text": "Download Zip"
+              }
+            ]
+          attachment_fields: |
+            [
+              {
+                "title": "Artifacts",
+                "value": "https://github.com/DTS-Productivity-Engineering/SalesforceCI/actions/runs/${{ github.run_id }}/artifacts|Download Artifacts"
+              },
+              {
+                "title": "Zip",
+                "value": "https://github.com/DTS-Productivity-Engineering/SalesforceCI/suites/${{ github.run_id }}|Download Zip"
+              }
+            ]
+          attachment_color: ${{ job.status }} 
+          attachment_pretext: "Job ${{ job.status }} for ${{ github.repository }} (${{ github.sha }})"
+          attachment_footer: "GitHub Actions"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_PRODUCTION }}
+      
+
+#Cleanup the runner
+
+      - name: Clean Workspace
+        continue-on-error: true
+        id: clean_workspace
+        uses: AutoModality/action-clean@v1.1.0
+        if: always()

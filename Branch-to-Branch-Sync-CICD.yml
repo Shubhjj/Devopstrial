@@ -1,0 +1,141 @@
+# This workflow is used to create PR from Master branch to all Lowers branches!
+
+name: Branch-to-Branch-Sync-CICD
+
+on:
+  schedule:
+   - cron: '0 13 * * 4' # Runs Every Thursday at 08:00 AM EST/Thursday at 01:00 PM UTC
+   - cron: '0 13 * * 1' # Runs Every Monday at 08:00 AM EST/Monday at 01:00 PM UTC
+  workflow_dispatch: # Can also be manually triggered, if needed.
+
+permissions:
+  contents: write # Required to commit changes from Salesforce and push them back to the remote.
+  packages: read
+  pull-requests: write
+
+# Jobs to be executed
+jobs:
+  job1:
+      name: Create-PR-${{ vars.GIT_BRANCH_NAME_PRODUCTION }}-to-${{ vars.GIT_BRANCH_NAME_SFPRODDEV }}
+      runs-on: [self-hosted, linux]
+      container:
+        image: ghcr.io/dts-productivity-engineering/docker_new/github-runner-new:main
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      steps:
+        - name: Checkout source code
+          uses: actions/checkout@v2
+
+        - name: Opening pull request
+          id: Pull-Request
+          uses: tretuna/sync-branches@1.4.0
+          with:
+            GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+            FROM_BRANCH: ${{ vars.GIT_BRANCH_NAME_PRODUCTION }}
+            TO_BRANCH: ${{ vars.GIT_BRANCH_NAME_SFPRODDEV }}
+            PULL_REQUEST_TITLE: PR from ${{ vars.GIT_BRANCH_NAME_PRODUCTION }} branch to ${{ vars.GIT_BRANCH_NAME_SFPRODDEV }} branch!
+            PULL_REQUEST_BODY: ${{ vars.PULL_REQUEST_BODY }}
+            REVIEWERS: '[${{ vars.PR_REVIEWERS_FOR_CICD_BRANCH_SYNC }}]'
+            PULL_REQUEST_IS_DRAFT: true
+            
+  job2:
+      name: Create-PR-${{ vars.GIT_BRANCH_NAME_PRODUCTION }}-to-${{ vars.GIT_BRANCH_NAME_SFPRODSTG }}
+      runs-on: [self-hosted, linux]
+      container:
+        image: ghcr.io/dts-productivity-engineering/docker_new/github-runner-new:main
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      steps:
+        - name: Checkout source code
+          uses: actions/checkout@v2
+
+        - name: Opening pull request
+          id: Pull-Request
+          uses: tretuna/sync-branches@1.4.0
+          with:
+            GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+            FROM_BRANCH: ${{ vars.GIT_BRANCH_NAME_PRODUCTION }}
+            TO_BRANCH: ${{ vars.GIT_BRANCH_NAME_SFPRODSTG }}
+            PULL_REQUEST_TITLE: PR from ${{ vars.GIT_BRANCH_NAME_PRODUCTION }} branch to ${{ vars.GIT_BRANCH_NAME_SFPRODSTG }} branch!
+            PULL_REQUEST_BODY: ${{ vars.PULL_REQUEST_BODY }}
+            REVIEWERS: '[${{ vars.PR_REVIEWERS_FOR_CICD_BRANCH_SYNC }}]'
+            PULL_REQUEST_IS_DRAFT: true
+
+  job3:
+      name: Create-PR-${{ vars.GIT_BRANCH_NAME_PRODUCTION }}-to-${{ vars.GIT_BRANCH_NAME_SFPROJDEV }}
+      runs-on: [self-hosted, linux]
+      container:
+        image: ghcr.io/dts-productivity-engineering/docker_new/github-runner-new:main
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      steps:
+        - name: Checkout source code
+          uses: actions/checkout@v2
+
+        - name: Opening pull request
+          id: Pull-Request
+          uses: tretuna/sync-branches@1.4.0
+          with:
+            GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+            FROM_BRANCH: ${{ vars.GIT_BRANCH_NAME_PRODUCTION }}
+            TO_BRANCH: ${{ vars.GIT_BRANCH_NAME_SFPROJDEV }}
+            PULL_REQUEST_TITLE: PR from ${{ vars.GIT_BRANCH_NAME_PRODUCTION }} branch to ${{ vars.GIT_BRANCH_NAME_SFPROJDEV }} branch!
+            PULL_REQUEST_BODY: ${{ vars.PULL_REQUEST_BODY }}
+            REVIEWERS: '[${{ vars.PR_REVIEWERS_FOR_CICD_BRANCH_SYNC }}]'
+            PULL_REQUEST_IS_DRAFT: true
+
+  job4:
+      name: Create-PR-${{ vars.GIT_BRANCH_NAME_PRODUCTION }}-to-${{ vars.GIT_BRANCH_NAME_SFPROJQA }}
+      runs-on: [self-hosted, linux]
+      container:
+        image: ghcr.io/dts-productivity-engineering/docker_new/github-runner-new:main
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      steps:
+        - name: Checkout source code
+          uses: actions/checkout@v2
+
+        - name: Opening pull request
+          id: Pull-Request
+          uses: tretuna/sync-branches@1.4.0
+          with:
+            GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+            FROM_BRANCH: ${{ vars.GIT_BRANCH_NAME_PRODUCTION }}
+            TO_BRANCH: ${{ vars.GIT_BRANCH_NAME_SFPROJQA }}
+            PULL_REQUEST_TITLE: PR from ${{ vars.GIT_BRANCH_NAME_PRODUCTION }} branch to ${{ vars.GIT_BRANCH_NAME_SFPROJQA }} branch!
+            PULL_REQUEST_BODY: ${{ vars.PULL_REQUEST_BODY }}
+            REVIEWERS: '[${{ vars.PR_REVIEWERS_FOR_CICD_BRANCH_SYNC }}]'
+            PULL_REQUEST_IS_DRAFT: true
+
+  job5:
+      name: Create-PR-${{ vars.GIT_BRANCH_NAME_PRODUCTION }}-to-${{ vars.GIT_BRANCH_NAME_SFPROJUAT }}
+      runs-on: [self-hosted, linux]
+      container:
+        image: ghcr.io/dts-productivity-engineering/docker_new/github-runner-new:main
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      steps:
+        - name: Checkout source code
+          uses: actions/checkout@v2
+
+        - name: Opening pull request
+          id: Pull-Request
+          uses: tretuna/sync-branches@1.4.0
+          with:
+            GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+            FROM_BRANCH: ${{ vars.GIT_BRANCH_NAME_PRODUCTION }}
+            TO_BRANCH: ${{ vars.GIT_BRANCH_NAME_SFPROJUAT }}
+            PULL_REQUEST_TITLE: PR from ${{ vars.GIT_BRANCH_NAME_PRODUCTION }} branch to ${{ vars.GIT_BRANCH_NAME_SFPROJUAT }} branch!
+            PULL_REQUEST_BODY: ${{ vars.PULL_REQUEST_BODY }}
+            REVIEWERS: '[${{ vars.PR_REVIEWERS_FOR_CICD_BRANCH_SYNC }}]'
+            PULL_REQUEST_IS_DRAFT: true
+
+        - name: Clean Workspace
+          id: Clean_Workspace
+          uses: AutoModality/action-clean@v1.1.0
+          if: always()
